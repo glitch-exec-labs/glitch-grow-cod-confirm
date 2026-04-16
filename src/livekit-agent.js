@@ -66,13 +66,13 @@ function buildSystemPrompt(v, lang) {
 // renders them natively — much better stress / vowel length than Latin
 // "ke liye" which Sarvam sometimes mispronounces as "thi liye".
 function hindiPrompt(v, ctxLines) {
-  return `***REMOVED***
+  return `आप Priya हैं — ${v.store_name} (एक ${v.store_category}) की एक ***REMOVED***।
 
 ***REMOVED***
 
 ## Call context (dynamic values — customer से मत पूछो, ये ***REMOVED***)
 
-***REMOVED***
+${ctxLines || `(No order context. This is a test / demo call — briefly greet the caller and explain you are Priya from ${v.store_name}; do not invent an order.)`}
 
 ## Call flow (इन steps को order में follow करो)
 
@@ -98,7 +98,7 @@ function hindiPrompt(v, ctxLines) {
 ***REMOVED***
 ***REMOVED***
 ***REMOVED***
-***REMOVED***
+- "ये call असली है?" → "बिलकुल, ${v.store_name} की तरफ़ से। ${v.order_number ? 'आपके order number ' + v.order_number + ' के बारे में call की है।' : ''}"
 
 **Rules:**
 ***REMOVED***
@@ -118,13 +118,13 @@ function hindiPrompt(v, ctxLines) {
 
 // ── English prompt ─────────────────────────────────────────────────────────
 function englishPrompt(v, ctxLines) {
-  return `***REMOVED***
+  return `You are Priya, a ***REMOVED*** calling from ${v.store_name} — ${articleFor(v.store_category)} ${v.store_category}. You speak Indian English naturally, in short sentences with warmth.
 
 ***REMOVED***
 
 ## Call context (known already — do NOT ask)
 
-***REMOVED***
+${ctxLines || `(No order context provided. This is a test / demo call — briefly greet the caller and mention you are Priya from ${v.store_name}; do not invent an order.)`}
 
 ## Call flow (follow in order)
 
@@ -150,7 +150,7 @@ function englishPrompt(v, ctxLines) {
 ***REMOVED***
 ***REMOVED***
 ***REMOVED***
-***REMOVED***
+- "Is this call real?" → "Yes, this is from ${v.store_name}.${v.order_number ? ' I am calling about your order ' + v.order_number + '.' : ''}"
 
 **Rules:**
 ***REMOVED***
@@ -191,13 +191,20 @@ function buildWelcome(v, lang) {
   const hasRealName = v.customer_name && v.customer_name !== 'Customer';
   if (lang === 'en-IN') {
     const address = hasRealName ? v.customer_name : '';
-    return `Hello${address ? ' ' + address : ''}, this is Priya calling from Your Store. I'm calling to confirm your recent order.`;
+    return `Hello${address ? ' ' + address : ''}, this is Priya calling from ${v.store_name}. I'm calling to confirm your recent order.`;
   }
   // Hindi / Hinglish — written in DEVANAGARI so Bulbul v3 renders natively.
   // "के लिए" in Devanagari avoids Latin-transliteration drift that produced
   // "thi liye" in earlier tests.
   const address = hasRealName ? `${v.customer_name} जी` : '';
-  return `***REMOVED***`;
+  return `नमस्ते${address ? ' ' + address : ''}, मैं Priya बोल रही हूँ ${v.store_name} से। आपके order के confirmation के लिए call किया है।`;
+}
+
+/** "a" / "an" for English category phrases. "online store" → "an" only if
+ *  first word starts with a vowel. Keeps prompt grammatical across
+ *  "online fashion store", "ayurvedic pet brand", etc. */
+function articleFor(s) {
+  return /^[aeiou]/i.test(String(s || '').trim()) ? 'an' : 'a';
 }
 
 // --- Tools -----------------------------------------------------------------
@@ -317,6 +324,12 @@ export default defineAgent({
       delivery_area:    attrs.delivery_area    || '',
       shop:             attrs.shop             || '',
       shopify_order_id: attrs.shopify_order_id || '',
+      // Brand context — passed per-call via participant attributes, with env
+      // fallback for single-tenant deployments. For multi-tenant, resolve
+      // per-shop (e.g. from a Shopify metafield) in trigger-livekit-call.js
+      // and pass `store_name` / `store_category` in participantAttributes.
+      store_name:       attrs.store_name       || process.env.STORE_NAME     || 'our store',
+      store_category:   attrs.store_category   || process.env.STORE_CATEGORY || 'online store',
     };
     console.log(`[livekit-agent] call for ${v.customer_name} / ${v.order_number} (${v.shop}) lang=${lang}`);
 
