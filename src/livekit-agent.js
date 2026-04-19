@@ -414,36 +414,35 @@ export default defineAgent({
       llm: new openai.LLM({
         model: 'gpt-4o-mini',
         temperature: 0.6,
-        maxTokens: 120,   // Priya speaks 1-2 short sentences — cap prevents slow generation
+        // 60 tokens ≈ one short Hindi sentence (~12 words). Forces brevity
+        // mechanically — combined with the "ONE sentence" prompt rule, cuts
+        // per-turn TTS latency dramatically.
+        // Prompt caching is automatic on OpenAI for prompts ≥1024 tokens —
+        // our ~1800-token system prompt auto-caches after the 2nd call
+        // within a 5-min window, saving ~300ms per subsequent LLM call.
+        maxTokens: 60,
       }),
-      // Sarvam Bulbul v3 WS streaming endpoint was stalling mid-greeting
-      // (observed 2026-04-19): sends initial audio frames, then goes silent
-      // without emitting "final" event or closing WS. LiveKit's 10s idle
-      // timeout force-closes the stream → customer hears nothing.
-      // Workaround: use REST (streaming: false) wrapped with tts.StreamAdapter
-      // so the agent still streams sentence-by-sentence, but each sentence
-      // uses a fresh REST call that reliably terminates. Slightly higher
-      // latency per sentence boundary but bullet-proof.
-      tts: new tts.StreamAdapter(
-        new sarvam.TTS({
-          model: 'bulbul:v3',
-          // bulbul:v3 streaming (WebSocket) accepts only native-v3 voices —
-          // NOT legacy v1/v2 ones like anushka / manisha / vidya / arya (those
-          // return WS 422). Native-v3 female list:
-          //   ritu, priya, neha, pooja, simran, kavya, ishita, shreya,
-          //   roopa, amelia, sophia, tanya, shruti, suhani, kavitha, rupali
-          // Swap this string to iterate on voice quality.
-          speaker: 'neha',
-          targetLanguageCode: lang,
-          pace: 1.0,                   // default; matches Sarvam's own benchmark-winning config
-          // Match the SIP leg natively (8 kHz μ-law). Skipping the 24k→8k
-          // resample step removes a major source of robotic artifacts on
-          // phone calls per Sarvam's own cookbook config.
-          sampleRate: 8000,
-          streaming: false,            // force REST path — see block comment above
-        }),
-        new tokenize.basic.SentenceTokenizer(),
-      ),
+      tts: new sarvam.TTS({
+        model: 'bulbul:v3',
+        // bulbul:v3 streaming (WebSocket) accepts only native-v3 voices —
+        // NOT legacy v1/v2 ones like anushka / manisha / vidya / arya (those
+        // return WS 422). Native-v3 female list:
+        //   ritu, priya, neha, pooja, simran, kavya, ishita, shreya,
+        //   roopa, amelia, sophia, tanya, shruti, suhani, kavitha, rupali
+        // Swap this string to iterate on voice quality.
+        speaker: 'neha',
+        targetLanguageCode: lang,
+        pace: 1.0,                   // default; matches Sarvam's own benchmark-winning config
+        // Match the SIP leg natively (8 kHz μ-law). Skipping the 24k→8k
+        // resample step removes a major source of robotic artifacts on
+        // phone calls per Sarvam's own cookbook config.
+        sampleRate: 8000,
+        // WS streaming path (default). Previously stalled with old Sarvam
+        // key — confirmed root cause was key-level throttling, not the WS
+        // protocol. With fresh key (2026-04-19) WS should stream cleanly
+        // and greeting latency drops from ~30s (REST) back to ~2-3s.
+        // If stalls return, fall back to tts.StreamAdapter + streaming:false.
+      }),
       turnDetection: new livekit.turnDetector.MultilingualModel(),
       preemptiveGeneration: true,    // default; false caused >10s startup delay, users hung up before greeting
       // AEC warmup default is 3000ms — interruptions are DISABLED during warmup.
