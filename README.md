@@ -114,8 +114,8 @@ Every call opens with a recording consent disclosure in Hindi and English (requi
 ### Install
 
 ```bash
-git clone https://github.com/glitch-exec-labs/glitch-cod-confirm.git
-cd glitch-cod-confirm
+git clone https://github.com/glitch-exec-labs/glitch-grow-cod-confirm.git
+cd glitch-grow-cod-confirm
 pnpm install
 cp .env.example .env
 # Edit .env with your credentials

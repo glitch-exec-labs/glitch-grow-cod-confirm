@@ -1,4 +1,4 @@
-# Changelog — `glitch-cod-confirm`
+# Changelog — `glitch-grow-cod-confirm`
 
 Auto-regenerated from `git log` by `/home/support/bin/changelog-regen`,
 called before every push by `/home/support/bin/git-sync-all` (cron `*/15 * * * *`).
@@ -82,7 +82,7 @@ Body text (if present) shown as indented sub-bullets.
     store at a time — all other stores' webhooks were rejected as HMAC
     mismatch (observed on Urban Classics in production).
     - Add SHOPIFY_WEBHOOK_SECRETS env var (JSON map keyed by myshopify
-      domain) matching the glitch-grow-ads-agent pattern
+      domain) matching the glitch-grow-ai-ads-agent pattern
     - Resolve secret per-request using X-Shopify-Shop-Domain header
     - SHOPIFY_WEBHOOK_SECRET retained as fallback for single-store setups
     - Health endpoint now surfaces per-shop count + fallback status
