@@ -1,10 +1,12 @@
-# Glitch COD Confirm
+# Glitch Grow COD Confirm
 
-**AI voice agent that calls Indian e-commerce customers to confirm cash-on-delivery orders — cutting RTO rates by catching cancellations, wrong addresses, and fake orders before dispatch. Every call is transcribed and recorded to build a proprietary training dataset.**
+**Glitch Grow AI voice agent for Shopify COD confirmation — cutting RTO rates by catching cancellations, wrong addresses, and fake orders before dispatch. Every call is transcribed and recorded to build a proprietary training dataset.**
 
 Built for Shopify stores selling in India where 60–70% of orders are COD and RTO rates run 25–40%.
 
 ---
+
+> Part of **Glitch Grow**, the digital marketing domain inside **Glitch Executor Labs** — one builder shipping products across **Trade**, **Edge**, and **Grow**.
 
 ## How it works
 
