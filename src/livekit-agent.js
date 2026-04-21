@@ -94,6 +94,10 @@ ${ctxLines || `(No order context. This is a test / demo call — briefly greet t
 ***REMOVED***
 
 ***REMOVED***
+  ***REMOVED***
+  ***REMOVED***
+  3. सिर्फ़ explicit re-confirmation के बाद ही \`cancel_order\` tool call करो reason के साथ, फिर कहो "ठीक है, मैं आपका order cancel कर देती हूँ। धन्यवाद।"
+  ***REMOVED***
 ***REMOVED***
 ***REMOVED***
 ***REMOVED***
@@ -105,6 +109,7 @@ ${ctxLines || `(No order context. This is a test / demo call — briefly greet t
 - "ये call असली है?" → "बिलकुल, ${v.store_name} की तरफ़ से। ${v.order_number ? 'आपके order number ' + v.order_number + ' के बारे में call की है।' : ''}"
 
 **Rules:**
+***REMOVED***
 ***REMOVED***
 ***REMOVED***
 ***REMOVED***
@@ -148,6 +153,10 @@ ${ctxLines || `(No order context provided. This is a test / demo call — briefl
 ***REMOVED***
 
 ***REMOVED***
+  ***REMOVED***
+  ***REMOVED***
+  3. Only AFTER the explicit re-confirmation, call \`cancel_order\` with the reason, then say "Okay, I've cancelled your order. Thank you."
+  ***REMOVED***
 ***REMOVED***
 ***REMOVED***
 ***REMOVED***
@@ -159,6 +168,7 @@ ${ctxLines || `(No order context provided. This is a test / demo call — briefl
 - "Is this call real?" → "Yes, this is from ${v.store_name}.${v.order_number ? ' I am calling about your order ' + v.order_number + '.' : ''}"
 
 **Rules:**
+***REMOVED***
 ***REMOVED***
 ***REMOVED***
 ***REMOVED***
