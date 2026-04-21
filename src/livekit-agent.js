@@ -181,13 +181,22 @@ function articleFor(s) {
  * doesn't have to re-pass shop/order_id/order_name on every invocation —
  * they're injected server-side from LiveKit participant attributes.
  */
-// TTS provider factory. Switch via TTS_PROVIDER env var: 'sarvam' (default)
-// or 'elevenlabs'. Both return a @livekit/agents-compatible TTS instance.
+// TTS provider factory. Switch via TTS_PROVIDER env var: 'elevenlabs'
+// (default, production) or 'sarvam' (fallback — kept wired for single-vendor
+// outage recovery and regression insurance). Both return a
+// @livekit/agents-compatible TTS instance.
+//
+// ElevenLabs (Samisha, eleven_turbo_v2_5) won the A/B on subjective Hindi
+// naturalness with TTFT in the same ballpark as Sarvam and better cold-start.
+// Enterprise-tier pricing removed the cost argument that originally favored
+// Sarvam. Sarvam stays as a 10-second env-var flip if ElevenLabs has an
+// outage or voice access is disrupted.
+//
 // Sample rate matches SIP 8kHz for both paths so the downstream pipeline is
 // unchanged. Voice IDs / speakers are env-tunable so we can pin a specific
 // ElevenLabs voice without touching code.
 function buildTTS(lang) {
-  const provider = (process.env.TTS_PROVIDER || 'sarvam').toLowerCase();
+  const provider = (process.env.TTS_PROVIDER || 'elevenlabs').toLowerCase();
   if (provider === 'elevenlabs') {
     const voiceId = process.env.ELEVENLABS_VOICE_ID;
     if (!voiceId) {
