@@ -22,6 +22,8 @@
  */
 
 import { fileURLToPath } from 'node:url';
+import { readFileSync, existsSync } from 'node:fs';
+import { dirname, resolve as resolvePath } from 'node:path';
 import {
   cli,
   defineAgent,
@@ -51,6 +53,39 @@ const TOOL_SECRET = process.env.LIVEKIT_TOOL_SECRET || '';
  * Values come from LiveKit participant attributes, set by the outbound-call
  * initiator via SipClient.createSipParticipant(..., { participantAttributes }).
  */
+// Prompts live in `prompts/` as text templates with {{placeholder}} fields.
+// Production deployments tune `prompts/hindi-prompt.txt` and
+// `prompts/english-prompt.txt` (gitignored — the real IP). The public repo
+// ships `*.example.txt` generic demos that are used as a fallback so the
+// engine is runnable out-of-the-box for anyone who clones it.
+//
+// This two-file layout is what keeps the architecture open while the tuned
+// wording stays proprietary. See prompts/README.md.
+const PROMPTS_DIR = resolvePath(dirname(fileURLToPath(import.meta.url)), '..', 'prompts');
+const promptCache = new Map();
+
+function loadPromptTemplate(basename) {
+  if (promptCache.has(basename)) return promptCache.get(basename);
+  const real = resolvePath(PROMPTS_DIR, `${basename}.txt`);
+  const demo = resolvePath(PROMPTS_DIR, `${basename}.example.txt`);
+  let path;
+  if (existsSync(real)) {
+    path = real;
+  } else if (existsSync(demo)) {
+    path = demo;
+    console.warn(`[prompts] Using demo fallback ${demo} — copy to ${basename}.txt and tune for production.`);
+  } else {
+    throw new Error(`[prompts] Missing both ${real} and ${demo}`);
+  }
+  const text = readFileSync(path, 'utf8');
+  promptCache.set(basename, text);
+  return text;
+}
+
+function renderTemplate(tmpl, vars) {
+  return tmpl.replace(/\{\{(\w+)\}\}/g, (_, key) => (key in vars ? vars[key] : `{{${key}}}`));
+}
+
 function buildSystemPrompt(v, lang) {
   const have = k => v[k] && String(v[k]).trim().length > 0;
   const ctxLines = [
@@ -61,128 +96,35 @@ function buildSystemPrompt(v, lang) {
     (have('delivery_area') || have('delivery_city')) &&
       `- Delivery address: ${[v.delivery_area, v.delivery_city].filter(Boolean).join(', ')}`,
   ].filter(Boolean).join('\n');
-  return lang === 'en-IN' ? englishPrompt(v, ctxLines) : hindiPrompt(v, ctxLines);
+
+  const isEn = lang === 'en-IN';
+  const fallbackCtx = isEn
+    ? `(No order context provided. This is a test / demo call — briefly greet the caller and mention you are Priya from ${v.store_name}; do not invent an order.)`
+    : `(No order context. This is a test / demo call — briefly greet the caller and explain you are Priya from ${v.store_name}; do not invent an order.)`;
+
+  const vars = {
+    store_name:           v.store_name,
+    store_category:       v.store_category,
+    store_article:        articleFor(v.store_category),
+    context_block:        ctxLines || fallbackCtx,
+    order_number_phrase:  v.order_number || (isEn ? 'your order' : 'अपना order'),
+    product_phrase:       v.product_name
+                            ? (isEn ? `a ${v.product_name}` : `एक ${v.product_name}`)
+                            : (isEn ? 'your product' : 'अपना product'),
+    amount_phrase:        v.total_amount
+                            ? (isEn ? englishRupees(v.total_amount) : hindiRupees(v.total_amount))
+                            : (isEn ? 'the stated amount' : 'बताया गया amount'),
+    address_phrase:       (v.delivery_area || (isEn ? 'your address' : 'आपका address'))
+                            + (v.delivery_city ? `, ${v.delivery_city}` : ''),
+    call_real_suffix:     v.order_number
+                            ? (isEn ? ` I am calling about your order ${v.order_number}.` : ` आपके order number ${v.order_number} के बारे में call की है।`)
+                            : '',
+  };
+
+  const tmpl = loadPromptTemplate(isEn ? 'english-prompt' : 'hindi-prompt');
+  return renderTemplate(tmpl, vars);
 }
 
-// ── Hindi / Hinglish prompt ────────────────────────────────────────────────
-// Hindi phrases written in DEVANAGARI (not Latin transliteration) so Bulbul v3
-// renders them natively — much better stress / vowel length than Latin
-// "ke liye" which Sarvam sometimes mispronounces as "thi liye".
-function hindiPrompt(v, ctxLines) {
-  return `आप Priya हैं — ${v.store_name} (एक ${v.store_category}) की एक ***REMOVED***।
-
-***REMOVED***
-
-## Call context (dynamic values — customer से मत पूछो, ये ***REMOVED***)
-
-${ctxLines || `(No order context. This is a test / demo call — briefly greet the caller and explain you are Priya from ${v.store_name}; do not invent an order.)`}
-
-## Call flow (इन steps को order में follow करो)
-
-***REMOVED***
-***REMOVED***
-
-***REMOVED***
-***REMOVED***
-***REMOVED***
-
-***REMOVED***
-- पहले \`confirm_order\` tool call करो (speech से पहले, same turn में)
-***REMOVED***
-***REMOVED***
-
-***REMOVED***
-
-***REMOVED***
-  ***REMOVED***
-  ***REMOVED***
-  3. सिर्फ़ explicit re-confirmation के बाद ही \`cancel_order\` tool call करो reason के साथ, फिर कहो "ठीक है, मैं आपका order cancel कर देती हूँ। धन्यवाद।"
-  ***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-- "ये call असली है?" → "बिलकुल, ${v.store_name} की तरफ़ से। ${v.order_number ? 'आपके order number ' + v.order_number + ' के बारे में call की है।' : ''}"
-
-**Rules:**
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-
-***REMOVED***`;
-}
-
-// ── English prompt ─────────────────────────────────────────────────────────
-function englishPrompt(v, ctxLines) {
-  return `You are Priya, a ***REMOVED*** calling from ${v.store_name} — ${articleFor(v.store_category)} ${v.store_category}. You speak Indian English naturally, in short sentences with warmth.
-
-***REMOVED***
-
-## Call context (known already — do NOT ask)
-
-${ctxLines || `(No order context provided. This is a test / demo call — briefly greet the caller and mention you are Priya from ${v.store_name}; do not invent an order.)`}
-
-## Call flow (follow in order)
-
-***REMOVED***
-***REMOVED***
-
-***REMOVED***
-***REMOVED***
-***REMOVED***
-
-***REMOVED***
-- First call \`confirm_order\` tool (before speaking, same turn)
-***REMOVED***
-***REMOVED***
-
-***REMOVED***
-
-***REMOVED***
-  ***REMOVED***
-  ***REMOVED***
-  3. Only AFTER the explicit re-confirmation, call \`cancel_order\` with the reason, then say "Okay, I've cancelled your order. Thank you."
-  ***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-
-**Common questions:**
-***REMOVED***
-***REMOVED***
-***REMOVED***
-- "Is this call real?" → "Yes, this is from ${v.store_name}.${v.order_number ? ' I am calling about your order ' + v.order_number + '.' : ''}"
-
-**Rules:**
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-
-***REMOVED***`;
-}
 
 /**
  * Convert rupee amount to spoken Hindi words hint.
