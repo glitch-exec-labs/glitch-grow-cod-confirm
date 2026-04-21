@@ -1,4 +1,4 @@
-# Changelog — `glitch-grow-cod-confirm`
+# Changelog — `glitch-cod-confirm`
 
 Auto-regenerated from `git log` by `/home/support/bin/changelog-regen`,
 called before every push by `/home/support/bin/git-sync-all` (cron `*/15 * * * *`).
@@ -11,9 +11,27 @@ Body text (if present) shown as indented sub-bullets.
 
 ---
 
+## 2026-04-21
+
+- **02:00 UTC** — auto-sync: 2026-04-21 02:00 UTC (`27ad4d3`) — 1 file
+        A	prompts/hindi-prompt.txt
+- **01:54 UTC** — safety: mandatory re-confirmation before cancel_order + STT-skepticism rule (`4c522f4`) — 1 file
+    Hardens two revenue-loss paths surfaced during the Sarvam vs ElevenLabs A/B:
+    1. Cancel flow now requires an explicit yes/no re-confirmation turn before
+       cancel_order fires. One mistranscribed word ("ही" vs "नहीं") is no longer
+       enough to cancel a legitimate order.
+    2. New STT-skepticism rule: if the customer has already positively confirmed
+       product+amount AND address, and then says something contradicting, the
+       LLM must ask a clarifying question instead of flipping to cancel.
+    Both changes applied to Hindi+English prompts. Mirrors the failure mode
+    observed in sandbox call #3 where STT transcribed "मैंने ही किया था" as
+    "मैं नहीं किया था" and the LLM correctly followed the (wrong) transcript
+
 ## 2026-04-20
 
-- **16:45 UTC** — auto-sync: 2026-04-20 16:45 UTC (`c3e4bda`) — 3 files
+- **22:53 UTC** — Update docs after public repo renames (`5c319bd`) — 2 files
+- **20:49 UTC** — Polish branding for Glitch Executor Labs public positioning (`4397757`) — 1 file
+- **16:45 UTC** — auto-sync: 2026-04-20 16:45 UTC (`f35c1ed`) — 4 files
         M	package.json
         M	pnpm-lock.yaml
         M	src/livekit-agent.js
@@ -82,7 +100,7 @@ Body text (if present) shown as indented sub-bullets.
     store at a time — all other stores' webhooks were rejected as HMAC
     mismatch (observed on Urban Classics in production).
     - Add SHOPIFY_WEBHOOK_SECRETS env var (JSON map keyed by myshopify
-      domain) matching the glitch-grow-ai-ads-agent pattern
+      domain) matching the glitch-grow-ads-agent pattern
     - Resolve secret per-request using X-Shopify-Shop-Domain header
     - SHOPIFY_WEBHOOK_SECRET retained as fallback for single-store setups
     - Health endpoint now surfaces per-shop count + fallback status
