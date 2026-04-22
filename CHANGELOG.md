@@ -11,9 +11,37 @@ Body text (if present) shown as indented sub-bullets.
 
 ---
 
+## 2026-04-22
+
+- **06:30 UTC** — auto-sync: 2026-04-22 06:30 UTC (`91b5482`) — 2 files
+        M	package.json
+        M	pnpm-lock.yaml
+- **06:07 UTC** — perf: warm Sarvam/ElevenLabs/OpenAI TLS during prewarm (`7b2869b`) — 1 file
+    Per-call session.start() was serialising cold TLS handshakes to
+    api.sarvam.ai (STT), api.elevenlabs.io (TTS), and api.openai.com (LLM).
+    From this VPS each handshake is 3-6s, and session.start() doesn't
+    return until all three WS connections are up. Result: 10-12s of dead
+    air between customer-picks-up and Priya-greets, sometimes 20+s at
+    peak. Real customers #8999 and #9000 hung up during that window.
+    Fire a fire-and-forget HEAD to each upstream during prewarm — long
+    enough to complete TLS negotiation and prime Node's tls.createSecureContext
+    session cache + DNS resolver. Subsequent WS upgrades from that child
+    process reuse the cached TLS session (fast resumption).
+- **05:41 UTC** — voice: raise interruption threshold to stop backchannel-barging (`8475974`) — 1 file
+    Real call #8998 (Dilshan Singh) exposed a severe UX regression: Indian
+    customers backchannel heavily — 'हाँ हाँ', 'हाँ जी', 'accha', 'ji ji' —
+    while the agent is still talking. That's politeness, not an
+    interruption. The prior minInterruptionWords=2 threshold was crossed by
+    2-word 'हाँ जी' and shredded Priya's sentences into 1-word fragments —
+    the product line 'आपने #8998' restarted 6 times over 20 seconds before
+    completing. The order still confirmed (tool fired), but the customer
+    experience was chaotic and sounded laggy.
+    Two gates, must BOTH cross:
+      minInterruptionWords:    2 → 3   (real objections are 3+ words:
+
 ## 2026-04-21
 
-- **06:15 UTC** — auto-sync: 2026-04-21 06:15 UTC (`016ba9e`) — 1 file
+- **06:15 UTC** — auto-sync: 2026-04-21 06:15 UTC (`9e14a49`) — 2 files
         M	src/livekit-agent.js
 - **05:50 UTC** — tts: normalize SKU to speakable category before it reaches the prompt (`1a091fc`) — 1 file
     Real-call transcript #8985 had Priya reading the full SKU verbatim:
