@@ -434,6 +434,30 @@ export default defineAgent({
       sampleRate: 8000,
       minSilenceDuration: 400,
     });
+
+    // Warm DNS + TLS sessions for the upstreams we open per-call. A full
+    // cold TLS handshake to api.sarvam.ai and api.elevenlabs.io is 3–6s
+    // each from this VPS; per-call session.start() serialised both, giving
+    // customers 10–12s of dead air before the greeting, and in peak minutes
+    // 20+s (they hung up). Hitting each host once at prewarm primes Node's
+    // TLS session cache and DNS, cutting subsequent WS upgrades to ~500ms.
+    //
+    // HEAD/200-OK isn't important — connection and TLS negotiation are the
+    // slow steps. Fire-and-forget; failure is not fatal.
+    const warmupHosts = [
+      'https://api.sarvam.ai/',
+      'https://api.elevenlabs.io/v1/models',
+      'https://api.openai.com/v1/models',
+    ];
+    await Promise.all(warmupHosts.map(async (url) => {
+      try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 4000);
+        await fetch(url, { method: 'HEAD', signal: controller.signal }).catch(() => {});
+        clearTimeout(t);
+      } catch { /* best-effort */ }
+    }));
+    console.log('[prewarm] TLS/DNS warmed for Sarvam + ElevenLabs + OpenAI');
   },
 
   entry: async (ctx) => {
