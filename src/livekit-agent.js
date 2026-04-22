@@ -136,9 +136,6 @@ function buildSystemPrompt(v, lang) {
 
 
 /**
- * Convert rupee amount to spoken Hindi words hint.
- */
-/**
  * Collapse a raw Shopify product title into a short speakable category
  * ("sunglasses", "shirt", ...) in the caller's language. Fed to the prompt
  * so Priya never has to read a full SKU out loud.
@@ -230,21 +227,77 @@ function speakableProduct(raw, lang) {
   return trimmed;
 }
 
+// Fully-spoken Hindi for amounts — NO digits anywhere in the output.
+//
+// Earlier this returned a hint like "2350 रुपय (Hindi words: 2 हज़ार 350
+// रुपय)" — which still contained the digits "2", "350" and "2350". The LLM
+// took the path of least resistance and read the digit prefix verbatim
+// ("2350 रुपय"), so the customer heard Arabic numerals in the middle of a
+// Hindi sentence. Since the placeholder is the ONLY thing the LLM sees for
+// the amount, we now return pure spoken Hindi — there is no digit option.
+//
+// Supports 1 – 99,99,999 (covers all realistic COD tickets up to ~1 crore).
+const HI_NUM_0_99 = [
+  'शून्य','एक','दो','तीन','चार','पाँच','छह','सात','आठ','नौ',
+  'दस','ग्यारह','बारह','तेरह','चौदह','पंद्रह','सोलह','सत्रह','अठारह','उन्नीस',
+  'बीस','इक्कीस','बाईस','तेईस','चौबीस','पच्चीस','छब्बीस','सत्ताईस','अट्ठाईस','उनतीस',
+  'तीस','इकत्तीस','बत्तीस','तैंतीस','चौंतीस','पैंतीस','छत्तीस','सैंतीस','अड़तीस','उनतालीस',
+  'चालीस','इकतालीस','बयालीस','तैंतालीस','चौवालीस','पैंतालीस','छियालीस','सैंतालीस','अड़तालीस','उनचास',
+  'पचास','इक्यावन','बावन','तिरपन','चौवन','पचपन','छप्पन','सत्तावन','अट्ठावन','उनसठ',
+  'साठ','इकसठ','बासठ','तिरसठ','चौंसठ','पैंसठ','छियासठ','सड़सठ','अड़सठ','उनहत्तर',
+  'सत्तर','इकहत्तर','बहत्तर','तिहत्तर','चौहत्तर','पचहत्तर','छिहत्तर','सतहत्तर','अठहत्तर','उनासी',
+  'अस्सी','इक्यासी','बयासी','तिरासी','चौरासी','पचासी','छियासी','सत्तासी','अट्ठासी','नवासी',
+  'नब्बे','इक्यानवे','बानवे','तिरानवे','चौरानवे','पंचानवे','छियानवे','सत्तानवे','अट्ठानवे','निन्यानवे',
+];
+function hindiNumber(n) {
+  if (n < 100) return HI_NUM_0_99[n];
+  if (n < 1000) {
+    const h = Math.floor(n / 100), rem = n % 100;
+    return HI_NUM_0_99[h] + ' सौ' + (rem ? ' ' + hindiNumber(rem) : '');
+  }
+  if (n < 100000) {
+    const k = Math.floor(n / 1000), rem = n % 1000;
+    return hindiNumber(k) + ' हज़ार' + (rem ? ' ' + hindiNumber(rem) : '');
+  }
+  if (n < 10000000) {
+    const l = Math.floor(n / 100000), rem = n % 100000;
+    return hindiNumber(l) + ' लाख' + (rem ? ' ' + hindiNumber(rem) : '');
+  }
+  return String(n); // outside realistic COD range
+}
 function hindiRupees(n) {
-  const amt = Number(String(n).replace(/[^0-9.]/g, ''));
+  const amt = Math.floor(Number(String(n).replace(/[^0-9.]/g, '')));
   if (!Number.isFinite(amt) || amt <= 0) return String(n);
-  if (amt >= 100000) return `${amt} रुपय (Hindi words: ${Math.floor(amt/100000)} लाख ${amt%100000 ? (amt%100000)+' ' : ''}रुपय)`;
-  if (amt >= 1000)   return `${amt} रुपय (Hindi words: ${Math.floor(amt/1000)} हज़ार ${amt%1000 ? (amt%1000)+' ' : ''}रुपय)`;
-  return `${amt} रुपय`;
+  return `${hindiNumber(amt)} रुपय`;
 }
 
-/** Convert rupee amount to spoken English words hint. */
+// Fully-spoken English for amounts — same rationale as hindiRupees.
+const EN_NUM_0_19 = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+const EN_TENS     = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+function englishNumber(n) {
+  if (n < 20) return EN_NUM_0_19[n];
+  if (n < 100) {
+    const t = Math.floor(n / 10), u = n % 10;
+    return EN_TENS[t] + (u ? '-' + EN_NUM_0_19[u] : '');
+  }
+  if (n < 1000) {
+    const h = Math.floor(n / 100), rem = n % 100;
+    return EN_NUM_0_19[h] + ' hundred' + (rem ? ' ' + englishNumber(rem) : '');
+  }
+  if (n < 100000) {
+    const k = Math.floor(n / 1000), rem = n % 1000;
+    return englishNumber(k) + ' thousand' + (rem ? ' ' + englishNumber(rem) : '');
+  }
+  if (n < 10000000) {
+    const l = Math.floor(n / 100000), rem = n % 100000;
+    return englishNumber(l) + ' lakh' + (rem ? ' ' + englishNumber(rem) : '');
+  }
+  return String(n);
+}
 function englishRupees(n) {
-  const amt = Number(String(n).replace(/[^0-9.]/g, ''));
+  const amt = Math.floor(Number(String(n).replace(/[^0-9.]/g, '')));
   if (!Number.isFinite(amt) || amt <= 0) return String(n);
-  if (amt >= 100000) return `${amt} rupees (say as: ${Math.floor(amt/100000)} lakh ${amt%100000 ? (amt%100000)+' ' : ''}rupees)`;
-  if (amt >= 1000)   return `${amt} rupees (say as: ${Math.floor(amt/1000)} thousand ${amt%1000 ? (amt%1000)+' ' : ''}rupees)`;
-  return `${amt} rupees`;
+  return `${englishNumber(amt)} rupees`;
 }
 
 function buildWelcome(v, lang) {
@@ -463,58 +516,48 @@ export default defineAgent({
   entry: async (ctx) => {
     // Connect to the LiveKit room (required before waitForParticipant).
     await ctx.connect();
-    // Wait for the SIP participant (the customer) to join the room.
-    const participant = await ctx.waitForParticipant();
 
-    // Pull dynamic context from participant attributes (set by
-    // SipClient.createSipParticipant's participantAttributes option).
-    const attrs = participant.attributes || {};
-    // Per-call language. Set via participant attribute "language" =
-    // 'hi-IN' (default) | 'en-IN'. Controls prompt, welcome, STT, TTS together.
-    const lang = attrs.language === 'en-IN' ? 'en-IN' : 'hi-IN';
-    const v = {
-      customer_name:    attrs.customer_name    || 'Customer',
-      order_number:     attrs.order_number     || '',
-      total_amount:     attrs.total_amount     || '',
-      product_name:     attrs.product_name     || 'your order',
-      delivery_city:    attrs.delivery_city    || '',
-      delivery_area:    attrs.delivery_area    || '',
-      shop:             attrs.shop             || '',
-      shopify_order_id: attrs.shopify_order_id || '',
-      // Brand context — passed per-call via participant attributes, with env
-      // fallback for single-tenant deployments. For multi-tenant, resolve
-      // per-shop (e.g. from a Shopify metafield) in trigger-livekit-call.js
-      // and pass `store_name` / `store_category` in participantAttributes.
-      store_name:       attrs.store_name       || process.env.STORE_NAME     || 'our store',
-      store_category:   attrs.store_category   || process.env.STORE_CATEGORY || 'online store',
-    };
-    console.log(`[livekit-agent] call for ${v.customer_name} / ${v.order_number} (${v.shop}) lang=${lang}`);
-
-    // ── Training-data moat: real-time turn persistence ──────────────────
-    // Captures every user utterance, every assistant utterance, and every
-    // tool call to Postgres via POST /webhook/livekit/turn. Paired with the
-    // room-composite audio egress started in trigger-livekit-call.js, this
-    // produces (audio, transcript, outcome) tuples for later training.
+    // ── Parallelize cold-start with SIP ring ────────────────────────────
+    // Previously: await waitForParticipant (2–8s SIP ring), THEN serially
+    // run session.start() (5–12s for STT/TTS/LLM WS upgrades). Customers
+    // heard 10–20s of dead air post-pickup and hung up.
     //
-    // - turnIndex is an in-worker monotonic counter. Unique across a single
-    //   session; uniqueness across retries is enforced by the server's
-    //   @@unique([roomName, turnIndex]) + upsert.
-    // - postTurn is fire-and-forget: we do not block the voice pipeline on
-    //   persistence. Failures log but don't bubble up.
-    let turnIndex = 0;
+    // Now: session is constructed with hi-IN defaults and session.start()
+    // is kicked off the moment ctx.connect() returns, running in parallel
+    // with the SIP ring. By the time the customer picks up, STT/TTS WS
+    // connections are already warm. Greeting fires near-instantly.
+    //
+    // hi-IN is hard-coded for the warmup because 98% of our traffic is
+    // Hindi. If the participant turns out to be en-IN, the default Sarvam
+    // Saaras hi-IN STT still handles English words passably (Hinglish is
+    // its training distribution), and ElevenLabs multilingual TTS speaks
+    // both languages. Small quality cost on the 2% edge case, zero cost
+    // on the 98%. A full mid-flight STT/TTS rebuild for language swap is
+    // significantly more complex and not worth it.
+
+    // Mutable per-call context. Event handlers close over these by
+    // reference so they see populated values once waitForParticipant
+    // returns. Handlers don't actually FIRE until the user speaks or the
+    // LLM generates, both of which happen AFTER v/lang are set.
+    const ctxMut = {
+      v: {},
+      lang: 'hi-IN',
+      turnIndex: 0,
+      sipCallId: null,
+    };
     const roomName = ctx.room?.name || '';
-    const sipCallId = attrs.sip_call_id || null;
+
     async function postTurn({ role, text, tool_name, tool_args, tool_result, stt_confidence }) {
-      if (!v.shop || !v.shopify_order_id || !roomName) return; // test/demo calls without order context — skip
+      if (!ctxMut.v.shop || !ctxMut.v.shopify_order_id || !roomName) return; // test/demo calls without order context — skip
       const payload = {
-        shop:              v.shop,
-        shopify_order_id:  v.shopify_order_id,
+        shop:              ctxMut.v.shop,
+        shopify_order_id:  ctxMut.v.shopify_order_id,
         room_name:         roomName,
-        sip_call_id:       sipCallId,
-        turn_index:        turnIndex++,
+        sip_call_id:       ctxMut.sipCallId,
+        turn_index:        ctxMut.turnIndex++,
         role,
         text:              text || '',
-        lang,
+        lang:              ctxMut.lang,
         tool_name, tool_args, tool_result, stt_confidence,
         started_at:        new Date().toISOString(),
       };
@@ -535,16 +578,21 @@ export default defineAgent({
       }
     }
 
-    const agent = new voice.Agent({
-      instructions: buildSystemPrompt(v, lang),
-      tools: buildTools(v),
+    // Placeholder agent used only while session.start() runs in parallel
+    // with waitForParticipant. It has no tools and trivial instructions,
+    // so even if (somehow) it were activated before updateAgent swap, it
+    // couldn't do any damage. The real agent is swapped in once we know
+    // the actual v/lang.
+    const placeholderAgent = new voice.Agent({
+      instructions: 'Placeholder agent. Do not speak. Wait for real instructions.',
+      tools: {},
     });
 
     const session = new voice.AgentSession({
       vad: ctx.proc.userData.vad,
       stt: new sarvam.STT({
         model: 'saaras:v3',
-        languageCode: lang,
+        languageCode: 'hi-IN',  // hi-IN warmup default; see block comment above
       }),
       llm: new openai.LLM({
         model: 'gpt-4o-mini',
@@ -558,14 +606,9 @@ export default defineAgent({
         maxTokens: 60,
       }),
       // TTS provider is env-selectable so we can A/B Sarvam vs ElevenLabs on
-      // the same call flow. Default is `sarvam` — purpose-trained on Hindi/
-      // Hinglish code-mix, ~1/4 to 1/8 the cost of ElevenLabs per char, and
-      // gives ~3s turn times on WS. ElevenLabs is the alternative when we're
-      // benchmarking naturalness.
-      //
-      // WS streaming path either way. REST was adding 10-15s per turn which
-      // killed UX (customer says "haan", Priya responds 22s later).
-      tts: buildTTS(lang),
+      // the same call flow. Default is `elevenlabs` in production. WS
+      // streaming path either way — REST adds 10–15s per turn which kills UX.
+      tts: buildTTS('hi-IN'),  // hi-IN warmup default
       turnDetection: new livekit.turnDetector.MultilingualModel(),
       preemptiveGeneration: true,    // default; false caused >10s startup delay, users hung up before greeting
       // AEC warmup default is 3000ms — interruptions are DISABLED during warmup.
@@ -673,10 +716,55 @@ export default defineAgent({
         clearTimeout(hangupTimer);
         hangupTimer = null;
       }
-      console.log(`[livekit-agent] session closed after ${turnIndex} turns`);
+      console.log(`[livekit-agent] session closed after ${ctxMut.turnIndex} turns`);
     });
 
-    await session.start({ agent, room: ctx.room });
+    // ── Kick off cold-start NOW, overlap with SIP ring ──────────────────
+    const coldStartMs = Date.now();
+    const startPromise = session.start({ agent: placeholderAgent, room: ctx.room });
+    console.log('[cold-start] session.start kicked off in parallel with participant wait');
+
+    // Wait for the SIP participant (the customer) to join the room.
+    // Typical SIP ring on Vobiz: 2–8s. STT/TTS warmup runs during this.
+    const participant = await ctx.waitForParticipant();
+    const participantArrivedMs = Date.now();
+
+    // Pull dynamic context from participant attributes (set by
+    // SipClient.createSipParticipant's participantAttributes option).
+    const attrs = participant.attributes || {};
+    ctxMut.lang = attrs.language === 'en-IN' ? 'en-IN' : 'hi-IN';
+    ctxMut.sipCallId = attrs.sip_call_id || null;
+    ctxMut.v = {
+      customer_name:    attrs.customer_name    || 'Customer',
+      order_number:     attrs.order_number     || '',
+      total_amount:     attrs.total_amount     || '',
+      product_name:     attrs.product_name     || 'your order',
+      delivery_city:    attrs.delivery_city    || '',
+      delivery_area:    attrs.delivery_area    || '',
+      shop:             attrs.shop             || '',
+      shopify_order_id: attrs.shopify_order_id || '',
+      store_name:       attrs.store_name       || process.env.STORE_NAME     || 'our store',
+      store_category:   attrs.store_category   || process.env.STORE_CATEGORY || 'online store',
+    };
+    const v = ctxMut.v;
+    const lang = ctxMut.lang;
+    console.log(`[livekit-agent] call for ${v.customer_name} / ${v.order_number} (${v.shop}) lang=${lang}`);
+
+    // Build the real agent with per-call instructions + tools.
+    const realAgent = new voice.Agent({
+      instructions: buildSystemPrompt(v, lang),
+      tools: buildTools(v),
+    });
+
+    // Wait for the warmup we kicked off earlier. If SIP ring took 5s and
+    // warmup took 6s, we only wait 1s here instead of the 10s we used to
+    // wait serially after pickup.
+    await startPromise;
+    const startReadyMs = Date.now();
+    console.log(`[cold-start] ready: sipRing=${participantArrivedMs - coldStartMs}ms warmupWait=${startReadyMs - participantArrivedMs}ms total=${startReadyMs - coldStartMs}ms`);
+
+    // Hot-swap placeholder → real agent (real instructions + tools).
+    session.updateAgent(realAgent);
 
     // Priya speaks first. LLM can riff afterwards.
     session.say(buildWelcome(v, lang), { allowInterruptions: true });
