@@ -548,10 +548,21 @@ export default defineAgent({
       // 500ms is enough for echo canceller to stabilise on a SIP call while
       // keeping barge-in responsive from the first second of each agent turn.
       aecWarmupDuration: 500,
-      // Require at least 2 words before treating customer speech as a real
-      // interruption — prevents single-syllable noise ("hmm", breath) from
-      // cutting Priya off mid-sentence.
-      minInterruptionWords: 2,
+      // Indian customers backchannel heavily — "हाँ हाँ", "हाँ जी", "accha",
+      // "ji ji" while the agent is still speaking is POLITENESS, not an
+      // interruption. The earlier threshold of 2 words was still getting
+      // tripped by "हाँ जी" and shredding Priya's sentences into 1-word
+      // fragments (real call #8998 restarted "आपने" 6 times in 20 seconds).
+      // Two gates must BOTH be crossed to count as an interruption:
+      //   - minInterruptionWords: 3  → real objections are "nahi chahiye",
+      //                                "mujhe nahi chahiye", "galat hai yeh"
+      //                                — all 3+ words. Polite 1–2-word
+      //                                backchannels pass through.
+      //   - minInterruptionDuration: 600ms → sustained speech, not a quick
+      //                                syllable. Filters echo clicks and
+      //                                half-heard TTS feedback.
+      minInterruptionWords: 3,
+      minInterruptionDuration: 600,
     });
 
     // Auto-hangup guard: once any of these tools fires, the call is done —
