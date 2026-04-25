@@ -11,9 +11,50 @@ Body text (if present) shown as indented sub-bullets.
 
 ---
 
+## 2026-04-25
+
+- **04:30 UTC** — auto-sync: 2026-04-25 04:30 UTC (`145d952`) — 1 file
+        A	scripts/find-yesterday-cod.mjs
+- **04:27 UTC** — voice: non-interruptible welcome to survive DTMF / button presses (`556a91d`) — 1 file
+    Real call #9022 (Kirti M, Urban Classics) showed a hard failure mode:
+    customer pressed a phone button mid-greeting, the DTMF tone crossed
+    our 600ms/3-word VAD threshold, speech was interrupted at second 7,
+    STT extracted no transcribable text from the DTMF audio, the LLM had
+    no user input to respond to, AgentActivity mainTask exited, and the
+    customer sat through 11 seconds of dead air before hanging up.
+    Pattern in the log:
+      speech interrupted by audio activity
+      [priya] <full greeting text logged>     ← spoken text (interrupted)
+      mainTask: scheduling paused and no more speech tasks to wait
+
+## 2026-04-24
+
+- **03:01 UTC** — multi-tenant: onboard Storico store alongside Urban Classics (`1a54afb`) — 3 files
+    Storico (ys4n0u-ys.myshopify.com) is the second tenant on the agent.
+    The system was already multi-tenant-aware at the architecture level
+    (per-shop Session row for Shopify Admin API, per-shop webhook secrets,
+    dynamic store_name via participant attributes) — this commit fills in
+    the remaining config + code so Priya knows which brand to say per call.
+    Changes:
+      * lib/shops.js: new getShopBranding(shop) — reads STORE_BRANDING JSON
+        env var, falls back to STORE_NAME / STORE_CATEGORY for unmapped
+        shops. Lookups are case-insensitive; invalid JSON logs a warning
+        and falls back gracefully. Caps at ~5 tenants before we should
+
 ## 2026-04-22
 
-- **06:30 UTC** — auto-sync: 2026-04-22 06:30 UTC (`91b5482`) — 2 files
+- **06:38 UTC** — perf: parallelize STT/TTS cold-start with SIP ring + speak amounts in words (`4108829`) — 1 file
+    Two fixes uncovered during today's live dispatch:
+    1. Cold-start dead air (50% of real calls)
+       Previously: await waitForParticipant (2-8s SIP ring) → then
+       serially run session.start() (5-12s for Sarvam STT + ElevenLabs TTS
+       + OpenAI LLM WS upgrades). Customers heard 10-20s of silence post-
+       pickup, concluded spam, hung up.
+       Now: session.start() fires immediately after ctx.connect(), running
+       in parallel with waitForParticipant. A placeholder Agent is used
+       for the warmup; the real agent (with per-call instructions + tools)
+       is hot-swapped via session.updateAgent() once participant attrs
+- **06:30 UTC** — auto-sync: 2026-04-22 06:30 UTC (`1a84c67`) — 3 files
         M	package.json
         M	pnpm-lock.yaml
 - **06:07 UTC** — perf: warm Sarvam/ElevenLabs/OpenAI TLS during prewarm (`7b2869b`) — 1 file
