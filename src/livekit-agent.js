@@ -767,7 +767,17 @@ export default defineAgent({
     session.updateAgent(realAgent);
 
     // Priya speaks first. LLM can riff afterwards.
-    session.say(buildWelcome(v, lang), { allowInterruptions: true });
+    // Welcome is intentionally NON-interruptible. Real-call #9022 (Kirti M)
+    // exposed a failure mode: customer pressed a phone button mid-greeting,
+    // the DTMF tone crossed our 600ms/3-word VAD threshold, speech was
+    // interrupted mid-sentence, STT got no transcribable text from the
+    // DTMF audio, the LLM had no user input to respond to, AgentActivity
+    // mainTask exited, and the customer sat through 11s of dead air before
+    // hanging up. Making the 10s greeting non-interruptible avoids the
+    // entire failure path. Subsequent turns (product confirm, address,
+    // farewell) keep interruptions enabled so customers CAN say
+    // "haan haan jaldi karo" / "nahi mujhe nahi chahiye" mid-Priya.
+    session.say(buildWelcome(v, lang), { allowInterruptions: false });
   },
 });
 
