@@ -216,12 +216,65 @@ async function sweepStuck(prisma, onFinalFail) {
 }
 
 /**
+ * Close the latest open CallAttempt for this scheduled call (if any).
+ * Idempotent — if no open row exists (e.g. dispatch failed before the
+ * attempt was created, or it was already closed), this is a no-op.
+ *
+ * Match priority: roomName → sipCallId → (shop, orderId) latest open. The
+ * fallback by (shop, orderId) is necessary for cases where dispatchOne
+ * threw before persisting roomName/sipCallId on the scheduledCall row.
+ *
+ * Issue #13: handleFailure() previously left CallAttempt rows open with
+ * disposition=null, endedAt=null whenever the scheduler resolved a call
+ * via no-answer / stuck-dispatch / final-fail. Tool-driven outcomes
+ * (confirm/cancel/etc.) closed the attempt; failures didn't. Caused
+ * orphaned half-rows that broke turnCount, audio joins, and dashboards.
+ */
+async function closeOpenAttempt(prisma, { shop, orderId, roomName, sipCallId }, disposition, notes) {
+  if (!shop || !orderId) return null;
+  let where;
+  if (roomName) {
+    where = { shop, orderId: String(orderId), roomName, endedAt: null };
+  } else if (sipCallId) {
+    where = { shop, orderId: String(orderId), sipCallId, endedAt: null };
+  } else {
+    where = { shop, orderId: String(orderId), endedAt: null };
+  }
+  const latest = await prisma.callAttempt.findFirst({
+    where, orderBy: { startedAt: 'desc' },
+  });
+  if (!latest) return null;
+  await prisma.callAttempt.update({
+    where: { id: latest.id },
+    data:  { endedAt: new Date(), disposition, notes },
+  });
+  return latest;
+}
+
+/**
  * Shared failure-handling: either requeue with backoff or finalize as failed.
  * attemptsAlreadyIncremented: dispatchOne increments on success-path.
  * For failures we decide based on row.attempts as it currently stands.
+ *
+ * Always closes the open CallAttempt — for retries, the previous attempt
+ * is closed before the next dispatch creates a fresh one (one CallAttempt
+ * per dispatch is the invariant). For final-fail, the attempt closes with
+ * disposition='no_answer'. For pre-call dispatch errors the attempt may
+ * not exist yet; closeOpenAttempt is a no-op in that case.
  */
 async function handleFailure(prisma, row, reason, onFinalFail) {
   const nextAttempts = (row.attempts || 0) + 1;
+
+  // Disposition reflects the failure mode. 'no_answer' for stuck-sweep
+  // (call placed, customer never picked up); 'dispatch_error' for
+  // pre-call failures (triggerLivekitCall threw — no SIP placed).
+  const disposition = reason && reason.includes('stuck-dispatch') ? 'no_answer' : 'dispatch_error';
+  await closeOpenAttempt(
+    prisma,
+    { shop: row.shop, orderId: row.orderId, roomName: row.roomName, sipCallId: row.sipCallId },
+    disposition,
+    reason,
+  );
 
   if (nextAttempts >= MAX_ATTEMPTS) {
     await prisma.scheduledCall.update({
